@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PushoverBilin v3.1 — Streamlit Web Edition (Robust Data Processing)
+PushoverBilin v3.2 — Streamlit Web Edition (Robust NumPy Compatibility)
 Seismic Pushover, SDOF Idealization & Target Displacement Analysis (EN 1998-1 / RPA)
 """
 
@@ -8,6 +8,10 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+# ── NumPy Version Compatibility Check ──
+# NumPy 2.0+ replaced np.trapz with np.trapezoid
+_trapz = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
 # ── Page Configuration ──
 st.set_page_config(
@@ -93,20 +97,12 @@ edited_df = st.sidebar.data_editor(
 )
 
 # ── Robust Data Parsing & Cleaning ──
-# 1. Work on a copy of the edited dataframe
 cleaned_df = edited_df.copy()
-
-# 2. Drop rows that contain any missing (None or NaN) inputs in vital columns
 cleaned_df = cleaned_df.dropna(subset=["Mass mi (t)", "Mode Shape φi"])
-
-# 3. Ensure columns are processed strictly as numeric datatypes (coerces strings/junk to NaN)
 cleaned_df["Mass mi (t)"] = pd.to_numeric(cleaned_df["Mass mi (t)"], errors="coerce")
 cleaned_df["Mode Shape φi"] = pd.to_numeric(cleaned_df["Mode Shape φi"], errors="coerce")
-
-# 4. Drop any rows where coercion created NaNs
 cleaned_df = cleaned_df.dropna(subset=["Mass mi (t)", "Mode Shape φi"])
 
-# 5. Extract cleaned numpy arrays
 m = cleaned_df["Mass mi (t)"].values.astype(float)
 phi = cleaned_df["Mode Shape φi"].values.astype(float)
 
@@ -148,10 +144,10 @@ d_max_star = sdof_disp[idx_max]
 
 F_y_star = F_max_star  # Equal to SDOF peak capacity (Vy = Vmax)
 
-# Compute area under curve using trapezoidal rule
+# Compute area under SDOF curve up to displacement peak using cross-version integration
 d_s = sdof_disp[:idx_max+1]
 f_s = sdof_force[:idx_max+1]
-area_raw = np.trapz(f_s, d_s)
+area_raw = _trapz(f_s, d_s)
 
 # Solve for yield displacement (Sdy*) via equal energy balance
 if F_y_star == 0:
