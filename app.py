@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PushoverBilin v3.0 — Streamlit Web Edition
+PushoverBilin v3.1 — Streamlit Web Edition (Robust Data Processing)
 Seismic Pushover, SDOF Idealization & Target Displacement Analysis (EN 1998-1 / RPA)
 """
 
@@ -92,12 +92,26 @@ edited_df = st.sidebar.data_editor(
     hide_index=True
 )
 
-# Extract inputs from edited table
-m = edited_df["Mass mi (t)"].values
-phi = edited_df["Mode Shape φi"].values
+# ── Robust Data Parsing & Cleaning ──
+# 1. Work on a copy of the edited dataframe
+cleaned_df = edited_df.copy()
+
+# 2. Drop rows that contain any missing (None or NaN) inputs in vital columns
+cleaned_df = cleaned_df.dropna(subset=["Mass mi (t)", "Mode Shape φi"])
+
+# 3. Ensure columns are processed strictly as numeric datatypes (coerces strings/junk to NaN)
+cleaned_df["Mass mi (t)"] = pd.to_numeric(cleaned_df["Mass mi (t)"], errors="coerce")
+cleaned_df["Mode Shape φi"] = pd.to_numeric(cleaned_df["Mode Shape φi"], errors="coerce")
+
+# 4. Drop any rows where coercion created NaNs
+cleaned_df = cleaned_df.dropna(subset=["Mass mi (t)", "Mode Shape φi"])
+
+# 5. Extract cleaned numpy arrays
+m = cleaned_df["Mass mi (t)"].values.astype(float)
+phi = cleaned_df["Mode Shape φi"].values.astype(float)
 
 if len(m) == 0 or len(phi) == 0:
-    st.error("Please specify at least one story in the table.")
+    st.error("Please specify at least one valid story with numeric properties in the table.")
     st.stop()
 
 # 3. Seismic Parameter Inputs
@@ -117,7 +131,10 @@ if t1 >= t2 or t2 >= t3:
 
 # SDOF Participation Factor calculations (Handwritten Page 1)
 m_star = np.sum(m * phi)
-M_1 = np.sum(m * phi**2)
+M_1 = np.sum(m * (phi**2))
+if M_1 == 0:
+    st.error("The dynamic modal properties result in a division by zero. Check mode shape values.")
+    st.stop()
 gamma = m_star / M_1
 
 # Transform raw curve to SDOF equivalent
@@ -137,6 +154,9 @@ f_s = sdof_force[:idx_max+1]
 area_raw = np.trapz(f_s, d_s)
 
 # Solve for yield displacement (Sdy*) via equal energy balance
+if F_y_star == 0:
+    st.error("Peak structural capacity is evaluated as zero. Check input capacity curve.")
+    st.stop()
 d_y_star = 2.0 * (d_max_star - (area_raw / F_y_star))
 
 # Physics verification and fallback limits
